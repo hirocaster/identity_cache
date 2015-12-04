@@ -3,6 +3,7 @@ module IdentityCache
     extend ActiveSupport::Concern
 
     included do |base|
+      base.after_commit :write_cache, on: [:create, :update]
       base.after_commit :expire_cache
     end
 
@@ -74,6 +75,17 @@ module IdentityCache
         records
       end
 
+      def coder_from_record(record) #:nodoc:
+        unless record.nil?
+          coder = {
+            attributes: record.attributes_before_type_cast,
+            class: record.class,
+          }
+          add_cached_associations_to_coder(record, coder)
+          coder
+        end
+      end
+
       private
 
       def raise_if_scoped
@@ -114,17 +126,6 @@ module IdentityCache
           embedded_variable.map {|e| coder_from_record(e) }
         else
           coder_from_record(embedded_variable)
-        end
-      end
-
-      def coder_from_record(record) #:nodoc:
-        unless record.nil?
-          coder = {
-            attributes: record.attributes_before_type_cast,
-            class: record.class,
-          }
-          add_cached_associations_to_coder(record, coder)
-          coder
         end
       end
 
@@ -375,6 +376,16 @@ module IdentityCache
       IdentityCache.cache.delete(primary_cache_index_key)
     end
 
+    def write_primary_index # :nodoc:
+      return unless self.class.primary_cache_index_enabled
+
+      IdentityCache.logger.debug do
+        "[IdentityCache] writing=#{self.class.name} writing_id=#{id}"
+      end
+
+      IdentityCache.cache.write(primary_cache_index_key, self.class.coder_from_record(self))
+    end
+
     def expire_secondary_indexes # :nodoc:
       return unless self.class.primary_cache_index_enabled
       cache_indexes.try(:each) do |fields|
@@ -409,6 +420,11 @@ module IdentityCache
       expire_primary_index
       expire_secondary_indexes
       expire_attribute_indexes
+      true
+    end
+
+    def write_cache
+      write_primary_index
       true
     end
 
