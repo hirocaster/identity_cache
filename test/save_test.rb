@@ -18,8 +18,8 @@ class SaveTest < IdentityCache::TestCase
 
     expect_cache_delete("#{NAMESPACE}index:Item:id/title:#{cache_hash('2/bob')}")
     expect_cache_delete("#{NAMESPACE}index:Item:title:#{cache_hash('bob')}")
-    expect_cache_delete("#{NAMESPACE}blob:Item:#{cache_hash("created_at:datetime,id:integer,item_id:integer,title:string,updated_at:datetime")}:2").once
     @record.save
+    expect_cache_delete_and_write("#{NAMESPACE}blob:Item:#{cache_hash("created_at:datetime,id:integer,item_id:integer,title:string,updated_at:datetime")}:2", attributes: @record.attributes)
   end
 
   def test_update
@@ -78,5 +78,9 @@ class SaveTest < IdentityCache::TestCase
 
   def expect_cache_delete(key)
     @backend.expects(:write).with(key, IdentityCache::DELETED, anything)
+  end
+
+  def expect_cache_delete_and_write(key, value)
+    @backend.expects(:write).with(key, any_of(IdentityCache::DELETED, value), anything)
   end
 end
